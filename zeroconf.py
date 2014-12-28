@@ -1206,7 +1206,8 @@ def normalize_interface_choice(choice, address_family):
     if choice is InterfaceChoice.Default:
         choice = ['0.0.0.0']
     elif choice is InterfaceChoice.All:
-        choice = get_all_addresses(address_family)
+        # make sure we return only unique values
+        choice = list(set(get_all_addresses(address_family)))
     return choice
 
 
