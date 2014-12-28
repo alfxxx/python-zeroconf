@@ -23,9 +23,9 @@ class MyListener(object):
         logger.info("Service added: '%s' (type is %s)", name, type)
         info = zeroconf.get_service_info(type, name)
         if info:
-            logger.info("'{name}' service info: {info}".format(name=name, info=info))
+            logger.debug("'{name}' service info: {info}".format(name=name, info=info))
         else:
-            logger.info("Service has no info")
+            logger.debug("Service has no info")
 
 if __name__ == '__main__':
     zeroconf = Zeroconf(interfaces=InterfaceChoice.All)
