@@ -1105,8 +1105,7 @@ class ServiceInfo(object):
                         value = True
                     elif value == b'false' or not value:
                         value = False
-                except Exception as e:  # TODO stop catching all Exceptions
-                    self.logger.exception('Unknown error, possibly benign: %r', e)
+                except ValueError as e:
                     # No equals sign at all
                     key = s
                     value = False
