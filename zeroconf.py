@@ -840,24 +840,31 @@ class Engine(threading.Thread):
         self.start()
 
     def run(self):
+        self.logger.debug("starting run()")
         while not _GLOBAL_DONE:
             rs = self.get_readers()
             if len(rs) == 0:
                 # No sockets to manage, but we wait for the timeout
                 # or addition of a socket
                 #
+                self.logger.debug("get_readers() returned 0-length list, waiting {t} to try again".format(t=self.timeout))
                 with self.condition:
                     self.condition.wait(self.timeout)
             else:
+                self.logger.debug("we have readers, about to try select on them, timeout={t}".format(t=self.timeout))
                 try:
                     rr, wr, er = select.select(rs, [], [], self.timeout)
+                    if rr == []:
+                        self.logger.debug("select returned empty list")
                     for socket_ in rr:
                         try:
+                            self.logger.debug("got data from socket, trying to handle")
                             self.readers[socket_].handle_read(socket_)
                         except Exception as e:  # TODO stop catching all Exceptions
                             self.logger.exception('Unknown error, possibly benign: %r', e)
                 except Exception as e:  # TODO stop catching all Exceptions
                     self.logger.exception('Unknown error, possibly benign: %r', e)
+        self.logger.debug("run() finished - _GLOBAL_DONE=={gd}".format(gd=_GLOBAL_DONE))
 
     def get_readers(self):
         result = []
@@ -892,9 +899,11 @@ class Listener(object):
     def __init__(self, zc, logger=None):
         if logger is None:
             self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.debug("intializing Listener")
         self.zc = zc
 
     def handle_read(self, socket_):
+        self.logger.debug("listener handle_read")
         try:
             data, (addr, port) = socket_.recvfrom(_MAX_MSG_ABSOLUTE)
         except socket.error as e:
@@ -1350,6 +1359,7 @@ class Zeroconf(object):
 
     def notify_all(self):
         """Notifies all waiting threads"""
+        self.logger.debug("notifying all waiting threads")
         with self.condition:
             self.condition.notify_all()
 
@@ -1358,6 +1368,7 @@ class Zeroconf(object):
         name and type, or None if no service matches by the timeout,
         which defaults to 3 seconds."""
         info = ServiceInfo(type, name)
+        self.logger.debug("requesting service information type={t} name={n} timeout={ti}".format(t=type, n=name, ti=timeout))
         if info.request(self, timeout):
             return info
         return None
@@ -1366,11 +1377,13 @@ class Zeroconf(object):
         """Adds a listener for a particular service type.  This object
         will then have its update_record method called when information
         arrives for that type."""
+        self.logger.debug("type={t} listener={l}".format(t=type, l=listener))
         self.remove_service_listener(listener)
         self.browsers.append(ServiceBrowser(self, type, listener))
 
     def remove_service_listener(self, listener):
         """Removes a listener from the set that is currently listening."""
+        self.logger.debug("removing service listener {l}".format(l=listener))
         for browser in self.browsers:
             if browser.listener == listener:
                 browser.cancel()
@@ -1410,6 +1423,7 @@ class Zeroconf(object):
             self.send(out)
             i += 1
             next_time += _REGISTER_TIME
+        self.logger.debug("done registering service")
 
     def unregister_service(self, info):
         """Unregister a service."""
@@ -1444,9 +1458,11 @@ class Zeroconf(object):
             self.send(out)
             i += 1
             next_time += _UNREGISTER_TIME
+        self.logger.debug("done unregistering service")
 
     def unregister_all_services(self):
         """Unregister all registered services."""
+        self.logger.debug("unregistering all services")
         if len(self.services) > 0:
             now = current_time_millis()
             next_time = now
@@ -1471,10 +1487,12 @@ class Zeroconf(object):
                 self.send(out)
                 i += 1
                 next_time += _UNREGISTER_TIME
+        self.logger.debug("done unregistering all services")
 
     def check_service(self, info):
         """Checks the network for a unique service name, modifying the
         ServiceInfo passed in if it is not unique."""
+        self.logger.debug("check_service {info}".format(info=info))
         now = current_time_millis()
         next_time = now
         i = 0
@@ -1507,6 +1525,7 @@ class Zeroconf(object):
         """Adds a listener for a given question.  The listener will have
         its update_record method called when information is available to
         answer the question."""
+        self.logger.debug("add listener question={q} listener={l}".format(q=question, l=listener))
         now = current_time_millis()
         self.listeners.append(listener)
         if question is not None:
@@ -1517,6 +1536,7 @@ class Zeroconf(object):
 
     def remove_listener(self, listener):
         """Removes a listener."""
+        self.logger.debug("removing listener: {l}".format(l=listener))
         try:
             self.listeners.remove(listener)
             self.notify_all()
@@ -1526,6 +1546,7 @@ class Zeroconf(object):
     def update_record(self, now, rec):
         """Used to notify listeners of new information that has updated
         a record."""
+        self.logger.debug("notifying listeners of new information that has updated a record")
         for listener in self.listeners:
             listener.update_record(self, now, rec)
         self.notify_all()
@@ -1549,6 +1570,7 @@ class Zeroconf(object):
                 self.cache.add(record)
 
             self.update_record(now, record)
+        self.logger.debug("done handling response")
 
     def handle_query(self, msg, addr, port):
         """Deal with incoming query packets.  Provides a response if
@@ -1615,6 +1637,7 @@ class Zeroconf(object):
         if out is not None and out.answers:
             out.id = msg.id
             self.send(out, addr, port)
+        self.logger.debug("done handling query")
 
     def send(self, out, addr=_MDNS_ADDR, port=_MDNS_PORT):
         """Sends an outgoing packet."""
