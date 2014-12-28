@@ -315,7 +315,9 @@ class DNSAddress(DNSRecord):
 
     """A DNS address record"""
 
-    def __init__(self, name, type, class_, ttl, address):
+    def __init__(self, name, type, class_, ttl, address, logger=None):
+        if logger is None:
+            self.logger = logging.getLogger(self.__class__.__name__)
         DNSRecord.__init__(self, name, type, class_, ttl)
         self.address = address
 
@@ -332,7 +334,7 @@ class DNSAddress(DNSRecord):
         try:
             return socket.inet_ntoa(self.address)
         except Exception as e:  # TODO stop catching all Exceptions
-            log.exception('Unknown error, possibly benign: %r', e)
+            self.logger.exception('Unknown error, possibly benign: %r', e)
             return self.address
 
 
@@ -798,8 +800,10 @@ class Engine(threading.Thread):
     packets.
     """
 
-    def __init__(self, zc):
+    def __init__(self, zc, logger=None):
         threading.Thread.__init__(self)
+        if logger is None:
+            self.logger = logging.getLogger(self.__class__.__name__)
         self.daemon = True
         self.zc = zc
         self.readers = {}  # maps socket to reader
@@ -823,9 +827,9 @@ class Engine(threading.Thread):
                         try:
                             self.readers[socket_].handle_read(socket_)
                         except Exception as e:  # TODO stop catching all Exceptions
-                            log.exception('Unknown error, possibly benign: %r', e)
+                            self.logger.exception('Unknown error, possibly benign: %r', e)
                 except Exception as e:  # TODO stop catching all Exceptions
-                    log.exception('Unknown error, possibly benign: %r', e)
+                    self.logger.exception('Unknown error, possibly benign: %r', e)
 
     def get_readers(self):
         result = []
@@ -919,8 +923,10 @@ class ServiceBrowser(threading.Thread):
     remove_service() methods called when this browser
     discovers changes in the services availability."""
 
-    def __init__(self, zc, type, listener):
+    def __init__(self, zc, type, listener, logger=None):
         """Creates a browser for a specific type"""
+        if logger is None:
+            self.logger = logging.getLogger(self.__class__.__name__)
         threading.Thread.__init__(self)
         self.daemon = True
         self.zc = zc
@@ -953,7 +959,7 @@ class ServiceBrowser(threading.Thread):
                     self.list.append(callback)
                     return
             except Exception as e:  # TODO stop catching all Exceptions
-                log.exception('Unknown error, possibly benign: %r', e)
+                self.logger.exception('Unknown error, possibly benign: %r', e)
                 if not expired:
                     self.services[record.alias.lower()] = record
                     callback = lambda x: self.listener.add_service(x,
@@ -1000,7 +1006,7 @@ class ServiceInfo(object):
     """Service information"""
 
     def __init__(self, type, name, address=None, port=None, weight=0,
-                 priority=0, properties=None, server=None):
+                 priority=0, properties=None, server=None, logger=None):
         """Create a service description.
 
         type: fully qualified service type name
@@ -1013,6 +1019,8 @@ class ServiceInfo(object):
                     bytes for the text field)
         server: fully qualified name for service host (defaults to name)"""
 
+        if logger is None:
+            self.logger = logging.getLogger(self.__class__.__name__)
         if not name.endswith(type):
             raise BadTypeInNameException
         self.type = type
@@ -1082,7 +1090,7 @@ class ServiceInfo(object):
                     elif value == b'false' or not value:
                         value = False
                 except Exception as e:  # TODO stop catching all Exceptions
-                    log.exception('Unknown error, possibly benign: %r', e)
+                    self.logger.exception('Unknown error, possibly benign: %r', e)
                     # No equals sign at all
                     key = s
                     value = False
@@ -1093,7 +1101,7 @@ class ServiceInfo(object):
 
             self._properties = result
         except Exception as e:  # TODO stop catching all Exceptions
-            log.exception('Unknown error, possibly benign: %r', e)
+            self.logger.exception('Unknown error, possibly benign: %r', e)
             self._properties = None
 
     def get_name(self):
@@ -1269,7 +1277,7 @@ class Zeroconf(object):
         self._respond_sockets = []
 
         for i in interfaces:
-            self.logger.debug("Setting sockopts for interface {i}: IPPROTO_IP, IP_ADD_MEMBERSHIP, inet_aton({m}) + inet_aton({i})".format(m=_MDNS_ADDR, i=i))
+            self.logger.debug("Setting listen sockopts for interface {i}: IPPROTO_IP, IP_ADD_MEMBERSHIP, inet_aton({m}) + inet_aton({i})".format(m=_MDNS_ADDR, i=i))
             self._listen_socket.setsockopt(
                 socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
                 socket.inet_aton(_MDNS_ADDR) + socket.inet_aton(i))
@@ -1277,6 +1285,7 @@ class Zeroconf(object):
             respond_socket = new_socket()
             respond_socket.setsockopt(
                 socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(i))
+            self.logger.debug("Setting respond sockopts for interface {i}: IPPROTO_IP, IP_MULTICAST_IF, inet_aton({i}".format(i=i))
 
             self._respond_sockets.append(respond_socket)
 
@@ -1289,9 +1298,13 @@ class Zeroconf(object):
 
         self.condition = threading.Condition()
 
+        self.logger.debug("Initializing Engine")
         self.engine = Engine(self)
+        self.logger.debug("Initializing Listener")
         self.listener = Listener(self)
+        self.logger.debug("adding reader to engine")
         self.engine.add_reader(self.listener, self._listen_socket)
+        self.logger.debug("Initializing Reaper")
         self.reaper = Reaper(self)
 
     def wait(self, timeout):
