@@ -7,39 +7,42 @@ import socket
 
 from six.moves import input
 
-from zeroconf import ServiceBrowser, Zeroconf
+from zeroconf import ServiceBrowser, Zeroconf, InterfaceChoice
 
+import logging
+FORMAT = "[%(levelname)s %(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(level=logging.DEBUG, format=FORMAT)
+logger = logging.getLogger()
 
 class MyListener(object):
 
     def remove_service(self, zeroconf, type, name):
-        print("Service %s removed" % (name,))
-        print('\n')
+        logger.info("Service removed: {n}".format(n=name))
 
     def add_service(self, zeroconf, type, name):
-        print("Service %s added" % (name,))
-        print("  Type is %s" % (type,))
+        logger.info("Service added: %s (type is %s)", name, type)
         info = zeroconf.get_service_info(type, name)
         if info:
-            print("  Address is %s:%d" % (socket.inet_ntoa(info.address),
-                                          info.port))
-            print("  Weight is %d, Priority is %d" % (info.weight,
-                                                      info.priority))
-            print("  Server is", info.server)
+            logger.info("{name} service info: address={addr}{port}; weight={weight}; priority={pri}; server={server}".format(addr=socket.inet_ntoa(info.address),
+                                                                                                                             port=info.port,
+                                                                                                                             weight=info.weight,
+                                                                                                                             pri=info.priority,
+                                                                                                                             server=info.server,
+                                                                                                                             name=name,
+                                                                                                                         ))
             if info.properties:
-                print("  Properties are")
                 for key, value in info.properties.items():
-                    print("    %s: %s" % (key, value))
+                    logger.info("{name} property: {k}={v}".format(name=name, k=key, v=value))
         else:
-            print("  No info")
-        print('\n')
+            logger.info("Service has no info")
 
 if __name__ == '__main__':
-    zeroconf = Zeroconf()
-    print("Browsing services...")
+    zeroconf = Zeroconf(interfaces=InterfaceChoice.All)
+    logger.info("Browsing services...")
     listener = MyListener()
     browser = ServiceBrowser(zeroconf, "_http._tcp.local.", listener)
     try:
         input("Waiting (press Enter to exit)...\n\n")
     finally:
         zeroconf.close()
+    logger.info("Done.")
