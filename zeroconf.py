@@ -1601,7 +1601,7 @@ class Zeroconf(object):
 
     def send(self, out, addr=_MDNS_ADDR, port=_MDNS_PORT):
         """Sends an outgoing packet."""
-        self.logger.debug("Sending: {out}".format(out=out))
+        self.logger.debug("Sending: {out} (addr={addr} port={port})".format(out=out, addr=addr, port=port))
         packet = out.packet()
         for s in self._respond_sockets:
             bytes_sent = s.sendto(packet, 0, (addr, port))
