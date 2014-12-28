@@ -403,7 +403,7 @@ class DNSText(DNSRecord):
     def __repr__(self):
         """String representation"""
         if len(self.text) > 10:
-            return self.to_string(self.text[:7] + "...")
+            return self.to_string(self.text[:7]) + "..."
         else:
             return self.to_string(self.text)
 
@@ -737,6 +737,19 @@ class DNSOutgoing(object):
                 self.insert_short(0, self.id)
         return b''.join(self.data)
 
+    def __repr__(self):
+        """String representation"""
+        s = 'DNSOutgoing('
+        if len(self.questions) > 0:
+            s += " QUESTIONS: " + ', '.join(str(q) for q in self.questions)
+        if len(self.answers) > 0:
+            s += " ANSWERS: " + ', '.join(str(a) for a in self.answers)
+        if len(self.authorities) > 0:
+            s += " AUTHORITIES: " + ', '.join(str(a) for a in self.authorities)
+        if len(self.additionals) > 0:
+            s += " ADDITIONALS: " + ', '.join(str(a) for a in self.additionals)
+        s += ')'
+        return s
 
 class DNSCache(object):
 
@@ -861,7 +874,9 @@ class Listener(object):
     It requires registration with an Engine object in order to have
     the read() method called when a socket is availble for reading."""
 
-    def __init__(self, zc):
+    def __init__(self, zc, logger=None):
+        if logger is None:
+            self.logger = logging.getLogger(self.__class__.__name__)
         self.zc = zc
 
     def handle_read(self, socket_):
@@ -951,8 +966,10 @@ class ServiceBrowser(threading.Thread):
             try:
                 oldrecord = self.services[record.alias.lower()]
                 if not expired:
+                    self.logger.debug("Updating existing service '%s' - resetting TTL", record.alias.lower())
                     oldrecord.reset_ttl(record)
                 else:
+                    self.logger.debug("Removing expired service '%s'", record.alias.lower())
                     del(self.services[record.alias.lower()])
                     callback = lambda x: self.listener.remove_service(x,
                                                                       self.type, record.alias)
@@ -1376,13 +1393,13 @@ class Zeroconf(object):
             if info.address:
                 out.add_answer_at_time(DNSAddress(info.server, _TYPE_A,
                                                   _CLASS_IN, ttl, info.address), 0)
-            self.logger.debug("Sending DNSOutgoing for service '{name}'".format(name=info.name))
             self.send(out)
             i += 1
             next_time += _REGISTER_TIME
 
     def unregister_service(self, info):
         """Unregister a service."""
+        self.logger.debug("Unregistering service: {info}".format(info=info))
         try:
             del(self.services[info.name.lower()])
             if self.servicetypes[info.type] > 1:
@@ -1585,6 +1602,7 @@ class Zeroconf(object):
 
     def send(self, out, addr=_MDNS_ADDR, port=_MDNS_PORT):
         """Sends an outgoing packet."""
+        self.logger.debug("Sending: {out}".format(out=out))
         packet = out.packet()
         for s in self._respond_sockets:
             bytes_sent = s.sendto(packet, 0, (addr, port))
