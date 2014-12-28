@@ -1658,15 +1658,9 @@ class Zeroconf(object):
 # query (for Zoe), and service unregistration.
 
 if __name__ == '__main__':
-    # if we're calling this directly, setup our logger here
-    FORMAT = "[%(levelname)s %(filename)s:%(lineno)s - %(name)s.%(funcName)s() ] %(message)s"
-    logging.basicConfig(level=logging.WARN, format=FORMAT, disable_existing_loggers=False)
-    logger = logging.getLogger('')
-    logger.addHandler(NullHandler())
-
-    if log.level == logging.NOTSET:
-        log.setLevel(logging.WARN)
-
+    logging.basicConfig(level=logging.DEBUG)
+    log.setLevel(logging.DEBUG)
+    
     print("Multicast DNS Service Discovery for Python, version %s" % __version__)
     r = Zeroconf()
     print("1. Testing registration of a service...")
