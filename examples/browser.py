@@ -20,19 +20,10 @@ class MyListener(object):
         logger.info("Service removed: {n}".format(n=name))
 
     def add_service(self, zeroconf, type, name):
-        logger.info("Service added: %s (type is %s)", name, type)
+        logger.info("Service added: '%s' (type is %s)", name, type)
         info = zeroconf.get_service_info(type, name)
         if info:
-            logger.info("{name} service info: address={addr}{port}; weight={weight}; priority={pri}; server={server}".format(addr=socket.inet_ntoa(info.address),
-                                                                                                                             port=info.port,
-                                                                                                                             weight=info.weight,
-                                                                                                                             pri=info.priority,
-                                                                                                                             server=info.server,
-                                                                                                                             name=name,
-                                                                                                                         ))
-            if info.properties:
-                for key, value in info.properties.items():
-                    logger.info("{name} property: {k}={v}".format(name=name, k=key, v=value))
+            logger.info("'{name}' service info: {info}".format(name=name, info=info))
         else:
             logger.info("Service has no info")
 
