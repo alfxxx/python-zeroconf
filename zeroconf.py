@@ -56,12 +56,6 @@ __all__ = [
 ]
 
 
-log = logging.getLogger(__name__)
-log.addHandler(NullHandler())
-
-if log.level == logging.NOTSET:
-    log.setLevel(logging.WARN)
-
 # hook for threads
 
 _GLOBAL_DONE = False
@@ -1246,24 +1240,35 @@ class Zeroconf(object):
     Supports registration, unregistration, queries and browsing.
     """
 
+    logger = None
+    
     def __init__(
         self,
         interfaces=InterfaceChoice.Default,
+        logger=None
     ):
         """Creates an instance of the Zeroconf class, establishing
         multicast communications, listening and reaping threads.
 
         :type interfaces: :class:`InterfaceChoice` or sequence of ip addresses
+        :param logger: a logging object to log to, default None (create own)
+        :type logger: :class:`logging.Logger` or None
         """
+        if logger is None:
+            self.logger = logging.getLogger(self.__class__.__name__)
+        
         global _GLOBAL_DONE
         _GLOBAL_DONE = False
 
         self._listen_socket = new_socket()
+        orig_interfaces = interfaces
         interfaces = normalize_interface_choice(interfaces, socket.AF_INET)
+        self.logger.debug("normalize_interface_choice({oi}, socket.AF_INET) returns: {i}".format(i=interfaces, oi=orig_interfaces))
 
         self._respond_sockets = []
 
         for i in interfaces:
+            self.logger.debug("Setting sockopts for interface {i}: IPPROTO_IP, IP_ADD_MEMBERSHIP, inet_aton({m}) + inet_aton({i})".format(m=_MDNS_ADDR, i=i))
             self._listen_socket.setsockopt(
                 socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
                 socket.inet_aton(_MDNS_ADDR) + socket.inet_aton(i))
@@ -1365,7 +1370,7 @@ class Zeroconf(object):
             else:
                 del self.servicetypes[info.type]
         except Exception as e:  # TODO stop catching all Exceptions
-            log.exception('Unknown error, possibly benign: %r', e)
+            self.logger.exception('Unknown error, possibly benign: %r', e)
         now = current_time_millis()
         next_time = now
         i = 0
@@ -1465,7 +1470,7 @@ class Zeroconf(object):
             self.listeners.remove(listener)
             self.notify_all()
         except Exception as e:  # TODO stop catching all Exceptions
-            log.exception('Unknown error, possibly benign: %r', e)
+            self.logger.exception('Unknown error, possibly benign: %r', e)
 
     def update_record(self, now, rec):
         """Used to notify listeners of new information that has updated
@@ -1552,7 +1557,7 @@ class Zeroconf(object):
                                                              _TYPE_A, _CLASS_IN | _CLASS_UNIQUE,
                                                              _DNS_TTL, service.address))
                 except Exception as e:  # TODO stop catching all Exceptions
-                    log.exception('Unknown error, possibly benign: %r', e)
+                    self.logger.exception('Unknown error, possibly benign: %r', e)
 
         if out is not None and out.answers:
             out.id = msg.id
@@ -1584,8 +1589,15 @@ class Zeroconf(object):
 # query (for Zoe), and service unregistration.
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
-    log.setLevel(logging.DEBUG)
+    # if we're calling this directly, setup our logger here
+    FORMAT = "[%(levelname)s %(filename)s:%(lineno)s - %(name)s.%(funcName)s() ] %(message)s"
+    logging.basicConfig(level=logging.WARN, format=FORMAT, disable_existing_loggers=False)
+    logger = logging.getLogger('')
+    logger.addHandler(NullHandler())
+
+    if log.level == logging.NOTSET:
+        log.setLevel(logging.WARN)
+
     print("Multicast DNS Service Discovery for Python, version %s" % __version__)
     r = Zeroconf()
     print("1. Testing registration of a service...")
