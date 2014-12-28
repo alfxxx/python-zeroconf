@@ -873,11 +873,13 @@ class Engine(threading.Thread):
         return result
 
     def add_reader(self, reader, socket):
+        self.logger.debug("adding reader: reader={r} socket={s}".format(r=reader, s=socket))
         with self.condition:
             self.readers[socket] = reader
             self.condition.notify()
 
     def del_reader(self, socket):
+        self.logger.debug("removing reader for socket {s}".format(s=socket))
         with self.condition:
             del(self.readers[socket])
             self.condition.notify()
