@@ -578,6 +578,21 @@ class DNSIncoming(object):
 
         return result
 
+    def __repr__(self):
+        """ string representation """
+        if self.is_query():
+            s = 'QUERY DNSIncoming('
+        elif self.is_response():
+            s = 'RESPONSE DNSIncoming('
+        else:
+            s = 'DNSIncoming('
+        if len(self.questions) > 0:
+            s += " QUESTIONS: " + ', '.join(str(q) for q in self.questions)
+        if len(self.answers) > 0:
+            s += " ANSWERS: " + ', '.join(str(a) for a in self.answers)
+        s += ')'
+        return s
+
 
 class DNSOutgoing(object):
 
@@ -1518,6 +1533,7 @@ class Zeroconf(object):
     def handle_response(self, msg):
         """Deal with incoming response packets.  All answers
         are held in the cache, and listeners are notified."""
+        self.logger.debug("handling message: {msg}".format(msg=msg))
         now = current_time_millis()
         for record in msg.answers:
             expired = record.is_expired(now)
@@ -1537,6 +1553,7 @@ class Zeroconf(object):
     def handle_query(self, msg, addr, port):
         """Deal with incoming query packets.  Provides a response if
         possible."""
+        self.logger.debug("handling query addr={addr} port={port} msg={msg}".format(addr=addr, port=port, msg=msg))
         out = None
 
         # Support unicast client responses
