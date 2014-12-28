@@ -958,14 +958,13 @@ class ServiceBrowser(threading.Thread):
                                                                       self.type, record.alias)
                     self.list.append(callback)
                     return
-            except Exception as e:  # TODO stop catching all Exceptions
-                self.logger.exception('Unknown error, possibly benign: %r', e)
+            except KeyError as e:
+                self.logger.debug('Updating newly-found service: %s', record.alias.lower())
                 if not expired:
                     self.services[record.alias.lower()] = record
                     callback = lambda x: self.listener.add_service(x,
                                                                    self.type, record.alias)
                     self.list.append(callback)
-
             expires = record.get_expiration_time(75)
             if expires < self.next_time:
                 self.next_time = expires
