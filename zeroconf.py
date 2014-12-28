@@ -991,7 +991,7 @@ class ServiceBrowser(threading.Thread):
                     self.list.append(callback)
                     return
             except KeyError as e:
-                self.logger.debug('Updating newly-found service: %s', record.alias.lower())
+                self.logger.info('Updating newly-found service: %s', record.alias.lower())
                 if not expired:
                     self.services[record.alias.lower()] = record
                     callback = lambda x: self.listener.add_service(x,
@@ -1307,7 +1307,7 @@ class Zeroconf(object):
         self._listen_socket = new_socket()
         orig_interfaces = interfaces
         interfaces = normalize_interface_choice(interfaces, socket.AF_INET)
-        self.logger.debug("normalize_interface_choice({oi}, socket.AF_INET) returns: {i}".format(i=interfaces, oi=orig_interfaces))
+        self.logger.info("using interfaces: {i}".format(i=interfaces))
 
         self._respond_sockets = []
 
@@ -1382,7 +1382,7 @@ class Zeroconf(object):
         information for that service.  The name of the service may be
         changed if needed to make it unique on the network."""
         self.check_service(info)
-        self.logger.debug("Registering service: {s}".format(s=info))
+        self.logger.info("Registering service: {s}".format(s=info))
         self.services[info.name.lower()] = info
         if info.type in self.servicetypes:
             self.servicetypes[info.type] += 1
@@ -1413,7 +1413,7 @@ class Zeroconf(object):
 
     def unregister_service(self, info):
         """Unregister a service."""
-        self.logger.debug("Unregistering service: {info}".format(info=info))
+        self.logger.info("Unregistering service: {info}".format(info=info))
         try:
             del(self.services[info.name.lower()])
             if self.servicetypes[info.type] > 1:
