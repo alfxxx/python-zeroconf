@@ -1533,7 +1533,7 @@ class Zeroconf(object):
     def handle_response(self, msg):
         """Deal with incoming response packets.  All answers
         are held in the cache, and listeners are notified."""
-        self.logger.debug("handling message: {msg}".format(msg=msg))
+        self.logger.debug("handling response: {msg}".format(msg=msg))
         now = current_time_millis()
         for record in msg.answers:
             expired = record.is_expired(now)
