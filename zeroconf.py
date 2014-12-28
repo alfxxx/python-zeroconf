@@ -55,6 +55,11 @@ __all__ = [
     "Error", "InterfaceChoice",
 ]
 
+log = logging.getLogger(__name__)
+log.addHandler(NullHandler())
+
+if log.level == logging.NOTSET:
+    log.setLevel(logging.WARN)
 
 # hook for threads
 
@@ -315,9 +320,7 @@ class DNSAddress(DNSRecord):
 
     """A DNS address record"""
 
-    def __init__(self, name, type, class_, ttl, address, logger=None):
-        if logger is None:
-            self.logger = logging.getLogger(self.__class__.__name__)
+    def __init__(self, name, type, class_, ttl, address):
         DNSRecord.__init__(self, name, type, class_, ttl)
         self.address = address
 
@@ -334,7 +337,7 @@ class DNSAddress(DNSRecord):
         try:
             return socket.inet_ntoa(self.address)
         except Exception as e:  # TODO stop catching all Exceptions
-            self.logger.exception('Unknown error, possibly benign: %r', e)
+            log.exception('Unknown error, possibly benign: %r', e)
             return self.address
 
 
@@ -828,10 +831,8 @@ class Engine(threading.Thread):
     packets.
     """
 
-    def __init__(self, zc, logger=None):
+    def __init__(self, zc):
         threading.Thread.__init__(self)
-        if logger is None:
-            self.logger = logging.getLogger(self.__class__.__name__)
         self.daemon = True
         self.zc = zc
         self.readers = {}  # maps socket to reader
@@ -840,31 +841,31 @@ class Engine(threading.Thread):
         self.start()
 
     def run(self):
-        self.logger.debug("starting run()")
+        log.debug("starting run()")
         while not _GLOBAL_DONE:
             rs = self.get_readers()
             if len(rs) == 0:
                 # No sockets to manage, but we wait for the timeout
                 # or addition of a socket
                 #
-                self.logger.debug("get_readers() returned 0-length list, waiting {t} to try again".format(t=self.timeout))
+                log.debug("get_readers() returned 0-length list, waiting {t} to try again".format(t=self.timeout))
                 with self.condition:
                     self.condition.wait(self.timeout)
             else:
-                self.logger.debug("we have readers, about to try select on them, timeout={t}".format(t=self.timeout))
+                log.debug("we have readers, about to try select on them, timeout={t}".format(t=self.timeout))
                 try:
                     rr, wr, er = select.select(rs, [], [], self.timeout)
                     if rr == []:
-                        self.logger.debug("select returned empty list")
+                        log.debug("select returned empty list")
                     for socket_ in rr:
                         try:
-                            self.logger.debug("got data from socket, trying to handle")
+                            log.debug("got data from socket, trying to handle")
                             self.readers[socket_].handle_read(socket_)
                         except Exception as e:  # TODO stop catching all Exceptions
-                            self.logger.exception('Unknown error, possibly benign: %r', e)
+                            log.exception('Unknown error, possibly benign: %r', e)
                 except Exception as e:  # TODO stop catching all Exceptions
-                    self.logger.exception('Unknown error, possibly benign: %r', e)
-        self.logger.debug("run() finished - _GLOBAL_DONE=={gd}".format(gd=_GLOBAL_DONE))
+                    log.exception('Unknown error, possibly benign: %r', e)
+        log.debug("run() finished - _GLOBAL_DONE=={gd}".format(gd=_GLOBAL_DONE))
 
     def get_readers(self):
         result = []
@@ -873,13 +874,13 @@ class Engine(threading.Thread):
         return result
 
     def add_reader(self, reader, socket):
-        self.logger.debug("adding reader: reader={r} socket={s}".format(r=reader, s=socket))
+        log.debug("adding reader: reader={r} socket={s}".format(r=reader, s=socket))
         with self.condition:
             self.readers[socket] = reader
             self.condition.notify()
 
     def del_reader(self, socket):
-        self.logger.debug("removing reader for socket {s}".format(s=socket))
+        log.debug("removing reader for socket {s}".format(s=socket))
         with self.condition:
             del(self.readers[socket])
             self.condition.notify()
@@ -898,14 +899,12 @@ class Listener(object):
     It requires registration with an Engine object in order to have
     the read() method called when a socket is availble for reading."""
 
-    def __init__(self, zc, logger=None):
-        if logger is None:
-            self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.debug("intializing Listener")
+    def __init__(self, zc):
+        log.debug("intializing Listener")
         self.zc = zc
 
     def handle_read(self, socket_):
-        self.logger.debug("listener handle_read")
+        log.debug("listener handle_read")
         try:
             data, (addr, port) = socket_.recvfrom(_MAX_MSG_ABSOLUTE)
         except socket.error as e:
@@ -964,10 +963,8 @@ class ServiceBrowser(threading.Thread):
     remove_service() methods called when this browser
     discovers changes in the services availability."""
 
-    def __init__(self, zc, type, listener, logger=None):
+    def __init__(self, zc, type, listener):
         """Creates a browser for a specific type"""
-        if logger is None:
-            self.logger = logging.getLogger(self.__class__.__name__)
         threading.Thread.__init__(self)
         self.daemon = True
         self.zc = zc
@@ -992,17 +989,17 @@ class ServiceBrowser(threading.Thread):
             try:
                 oldrecord = self.services[record.alias.lower()]
                 if not expired:
-                    self.logger.debug("Updating existing service '%s' - resetting TTL", record.alias.lower())
+                    log.debug("Updating existing service '%s' - resetting TTL", record.alias.lower())
                     oldrecord.reset_ttl(record)
                 else:
-                    self.logger.debug("Removing expired service '%s'", record.alias.lower())
+                    log.debug("Removing expired service '%s'", record.alias.lower())
                     del(self.services[record.alias.lower()])
                     callback = lambda x: self.listener.remove_service(x,
                                                                       self.type, record.alias)
                     self.list.append(callback)
                     return
             except KeyError as e:
-                self.logger.info('Updating newly-found service: %s', record.alias.lower())
+                log.info('Updating newly-found service: %s', record.alias.lower())
                 if not expired:
                     self.services[record.alias.lower()] = record
                     callback = lambda x: self.listener.add_service(x,
@@ -1048,7 +1045,7 @@ class ServiceInfo(object):
     """Service information"""
 
     def __init__(self, type, name, address=None, port=None, weight=0,
-                 priority=0, properties=None, server=None, logger=None):
+                 priority=0, properties=None, server=None):
         """Create a service description.
 
         type: fully qualified service type name
@@ -1061,8 +1058,6 @@ class ServiceInfo(object):
                     bytes for the text field)
         server: fully qualified name for service host (defaults to name)"""
 
-        if logger is None:
-            self.logger = logging.getLogger(self.__class__.__name__)
         if not name.endswith(type):
             raise BadTypeInNameException
         self.type = type
@@ -1142,7 +1137,7 @@ class ServiceInfo(object):
 
             self._properties = result
         except Exception as e:  # TODO stop catching all Exceptions
-            self.logger.exception('Unknown error, possibly benign: %r', e)
+            log.exception('Unknown error, possibly benign: %r', e)
             self._properties = None
 
     def get_name(self):
@@ -1299,18 +1294,13 @@ class Zeroconf(object):
     
     def __init__(
         self,
-        interfaces=InterfaceChoice.Default,
-        logger=None
+        interfaces=InterfaceChoice.Default
     ):
         """Creates an instance of the Zeroconf class, establishing
         multicast communications, listening and reaping threads.
 
         :type interfaces: :class:`InterfaceChoice` or sequence of ip addresses
-        :param logger: a logging object to log to, default None (create own)
-        :type logger: :class:`logging.Logger` or None
         """
-        if logger is None:
-            self.logger = logging.getLogger(self.__class__.__name__)
         
         global _GLOBAL_DONE
         _GLOBAL_DONE = False
@@ -1318,12 +1308,12 @@ class Zeroconf(object):
         self._listen_socket = new_socket()
         orig_interfaces = interfaces
         interfaces = normalize_interface_choice(interfaces, socket.AF_INET)
-        self.logger.info("using interfaces: {i}".format(i=interfaces))
+        log.info("using interfaces: {i}".format(i=interfaces))
 
         self._respond_sockets = []
 
         for i in interfaces:
-            self.logger.debug("Setting listen sockopts for interface {i}: IPPROTO_IP, IP_ADD_MEMBERSHIP, inet_aton({m}) + inet_aton({i})".format(m=_MDNS_ADDR, i=i))
+            log.debug("Setting listen sockopts for interface {i}: IPPROTO_IP, IP_ADD_MEMBERSHIP, inet_aton({m}) + inet_aton({i})".format(m=_MDNS_ADDR, i=i))
             self._listen_socket.setsockopt(
                 socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
                 socket.inet_aton(_MDNS_ADDR) + socket.inet_aton(i))
@@ -1331,7 +1321,7 @@ class Zeroconf(object):
             respond_socket = new_socket()
             respond_socket.setsockopt(
                 socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(i))
-            self.logger.debug("Setting respond sockopts for interface {i}: IPPROTO_IP, IP_MULTICAST_IF, inet_aton({i}".format(i=i))
+            log.debug("Setting respond sockopts for interface {i}: IPPROTO_IP, IP_MULTICAST_IF, inet_aton({i}".format(i=i))
 
             self._respond_sockets.append(respond_socket)
 
@@ -1344,13 +1334,13 @@ class Zeroconf(object):
 
         self.condition = threading.Condition()
 
-        self.logger.debug("Initializing Engine")
+        log.debug("Initializing Engine")
         self.engine = Engine(self)
-        self.logger.debug("Initializing Listener")
+        log.debug("Initializing Listener")
         self.listener = Listener(self)
-        self.logger.debug("adding reader to engine")
+        log.debug("adding reader to engine")
         self.engine.add_reader(self.listener, self._listen_socket)
-        self.logger.debug("Initializing Reaper")
+        log.debug("Initializing Reaper")
         self.reaper = Reaper(self)
 
     def wait(self, timeout):
@@ -1361,7 +1351,7 @@ class Zeroconf(object):
 
     def notify_all(self):
         """Notifies all waiting threads"""
-        self.logger.debug("notifying all waiting threads")
+        log.debug("notifying all waiting threads")
         with self.condition:
             self.condition.notify_all()
 
@@ -1370,7 +1360,7 @@ class Zeroconf(object):
         name and type, or None if no service matches by the timeout,
         which defaults to 3 seconds."""
         info = ServiceInfo(type, name)
-        self.logger.debug("requesting service information type={t} name={n} timeout={ti}".format(t=type, n=name, ti=timeout))
+        log.debug("requesting service information type={t} name={n} timeout={ti}".format(t=type, n=name, ti=timeout))
         if info.request(self, timeout):
             return info
         return None
@@ -1379,13 +1369,13 @@ class Zeroconf(object):
         """Adds a listener for a particular service type.  This object
         will then have its update_record method called when information
         arrives for that type."""
-        self.logger.debug("type={t} listener={l}".format(t=type, l=listener))
+        log.debug("type={t} listener={l}".format(t=type, l=listener))
         self.remove_service_listener(listener)
         self.browsers.append(ServiceBrowser(self, type, listener))
 
     def remove_service_listener(self, listener):
         """Removes a listener from the set that is currently listening."""
-        self.logger.debug("removing service listener {l}".format(l=listener))
+        log.debug("removing service listener {l}".format(l=listener))
         for browser in self.browsers:
             if browser.listener == listener:
                 browser.cancel()
@@ -1397,7 +1387,7 @@ class Zeroconf(object):
         information for that service.  The name of the service may be
         changed if needed to make it unique on the network."""
         self.check_service(info)
-        self.logger.info("Registering service: {s}".format(s=info))
+        log.info("Registering service: {s}".format(s=info))
         self.services[info.name.lower()] = info
         if info.type in self.servicetypes:
             self.servicetypes[info.type] += 1
@@ -1425,11 +1415,11 @@ class Zeroconf(object):
             self.send(out)
             i += 1
             next_time += _REGISTER_TIME
-        self.logger.debug("done registering service")
+        log.debug("done registering service")
 
     def unregister_service(self, info):
         """Unregister a service."""
-        self.logger.info("Unregistering service: {info}".format(info=info))
+        log.info("Unregistering service: {info}".format(info=info))
         try:
             del(self.services[info.name.lower()])
             if self.servicetypes[info.type] > 1:
@@ -1437,7 +1427,7 @@ class Zeroconf(object):
             else:
                 del self.servicetypes[info.type]
         except Exception as e:  # TODO stop catching all Exceptions
-            self.logger.exception('Unknown error, possibly benign: %r', e)
+            log.exception('Unknown error, possibly benign: %r', e)
         now = current_time_millis()
         next_time = now
         i = 0
@@ -1460,11 +1450,11 @@ class Zeroconf(object):
             self.send(out)
             i += 1
             next_time += _UNREGISTER_TIME
-        self.logger.debug("done unregistering service")
+        log.debug("done unregistering service")
 
     def unregister_all_services(self):
         """Unregister all registered services."""
-        self.logger.debug("unregistering all services")
+        log.debug("unregistering all services")
         if len(self.services) > 0:
             now = current_time_millis()
             next_time = now
@@ -1489,12 +1479,12 @@ class Zeroconf(object):
                 self.send(out)
                 i += 1
                 next_time += _UNREGISTER_TIME
-        self.logger.debug("done unregistering all services")
+        log.debug("done unregistering all services")
 
     def check_service(self, info):
         """Checks the network for a unique service name, modifying the
         ServiceInfo passed in if it is not unique."""
-        self.logger.debug("check_service {info}".format(info=info))
+        log.debug("check_service {info}".format(info=info))
         now = current_time_millis()
         next_time = now
         i = 0
@@ -1527,7 +1517,7 @@ class Zeroconf(object):
         """Adds a listener for a given question.  The listener will have
         its update_record method called when information is available to
         answer the question."""
-        self.logger.debug("add listener question={q} listener={l}".format(q=question, l=listener))
+        log.debug("add listener question={q} listener={l}".format(q=question, l=listener))
         now = current_time_millis()
         self.listeners.append(listener)
         if question is not None:
@@ -1538,17 +1528,17 @@ class Zeroconf(object):
 
     def remove_listener(self, listener):
         """Removes a listener."""
-        self.logger.debug("removing listener: {l}".format(l=listener))
+        log.debug("removing listener: {l}".format(l=listener))
         try:
             self.listeners.remove(listener)
             self.notify_all()
         except Exception as e:  # TODO stop catching all Exceptions
-            self.logger.exception('Unknown error, possibly benign: %r', e)
+            log.exception('Unknown error, possibly benign: %r', e)
 
     def update_record(self, now, rec):
         """Used to notify listeners of new information that has updated
         a record."""
-        self.logger.debug("notifying listeners of new information that has updated a record")
+        log.debug("notifying listeners of new information that has updated a record")
         for listener in self.listeners:
             listener.update_record(self, now, rec)
         self.notify_all()
@@ -1556,7 +1546,7 @@ class Zeroconf(object):
     def handle_response(self, msg):
         """Deal with incoming response packets.  All answers
         are held in the cache, and listeners are notified."""
-        self.logger.debug("handling response: {msg}".format(msg=msg))
+        log.debug("handling response: {msg}".format(msg=msg))
         now = current_time_millis()
         for record in msg.answers:
             expired = record.is_expired(now)
@@ -1572,12 +1562,12 @@ class Zeroconf(object):
                 self.cache.add(record)
 
             self.update_record(now, record)
-        self.logger.debug("done handling response")
+        log.debug("done handling response")
 
     def handle_query(self, msg, addr, port):
         """Deal with incoming query packets.  Provides a response if
         possible."""
-        self.logger.debug("handling query addr={addr} port={port} msg={msg}".format(addr=addr, port=port, msg=msg))
+        log.debug("handling query addr={addr} port={port} msg={msg}".format(addr=addr, port=port, msg=msg))
         out = None
 
         # Support unicast client responses
@@ -1634,16 +1624,16 @@ class Zeroconf(object):
                                                              _TYPE_A, _CLASS_IN | _CLASS_UNIQUE,
                                                              _DNS_TTL, service.address))
                 except Exception as e:  # TODO stop catching all Exceptions
-                    self.logger.exception('Unknown error, possibly benign: %r', e)
+                    log.exception('Unknown error, possibly benign: %r', e)
 
         if out is not None and out.answers:
             out.id = msg.id
             self.send(out, addr, port)
-        self.logger.debug("done handling query")
+        log.debug("done handling query")
 
     def send(self, out, addr=_MDNS_ADDR, port=_MDNS_PORT):
         """Sends an outgoing packet."""
-        self.logger.debug("Sending: {out} (addr={addr} port={port})".format(out=out, addr=addr, port=port))
+        log.debug("Sending: {out} (addr={addr} port={port})".format(out=out, addr=addr, port=port))
         packet = out.packet()
         for s in self._respond_sockets:
             bytes_sent = s.sendto(packet, 0, (addr, port))
