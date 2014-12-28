@@ -1183,15 +1183,20 @@ class ServiceInfo(object):
 
     def __repr__(self):
         """String representation"""
+        repr_list = ['%s=%r' % (name, getattr(self, name))
+                     for name in ['type',
+                                  'name',
+                                  'port',
+                                  'weight',
+                                  'priority',
+                                  'server',
+                                  'properties',
+                              ]
+        ]
+        repr_list.append('address=%r' % socket.inet_ntoa(self.address))
         return '%s(%s)' % (
             type(self).__name__,
-            ', '.join(
-                '%s=%r' % (name, getattr(self, name))
-                for name in (
-                    'type', 'name', 'address', 'port', 'weight', 'priority',
-                    'server', 'properties',
-                )
-            )
+            ', '.join(repr_list)
         )
 
 
@@ -1346,6 +1351,7 @@ class Zeroconf(object):
         information for that service.  The name of the service may be
         changed if needed to make it unique on the network."""
         self.check_service(info)
+        self.logger.debug("Registering service: {s}".format(s=info))
         self.services[info.name.lower()] = info
         if info.type in self.servicetypes:
             self.servicetypes[info.type] += 1
@@ -1370,6 +1376,7 @@ class Zeroconf(object):
             if info.address:
                 out.add_answer_at_time(DNSAddress(info.server, _TYPE_A,
                                                   _CLASS_IN, ttl, info.address), 0)
+            self.logger.debug("Sending DNSOutgoing for service '{name}'".format(name=info.name))
             self.send(out)
             i += 1
             next_time += _REGISTER_TIME
